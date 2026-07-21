@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<settings>
+  <category label="Login">
+    <setting id="username" type="text" label="Username / Email" default=""/>
+    <setting id="password" type="text" label="Password" default="" option="hidden"/>
+  </category>
+  <category label="Advanced">
+    <setting id="base_url" type="text" label="Base URL" default="https://tv.flexitv.sk"/>
+  </category>
+</settings>

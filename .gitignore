@@ -1,0 +1,11 @@
+# OS / IDE
+.DS_Store
+.graymatter/
+__pycache__/
+*.pyc
+
+# Bundled Python dependencies (rebuilt by build.sh)
+plugin.video.flexitv/resources/lib/python-deps/
+
+# Python venv / pip scratch dirs (used during build)
+py39-deps/

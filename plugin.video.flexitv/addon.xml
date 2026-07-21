@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="plugin.video.flexitv" name="Flexi TV" version="1.0.7" provider-name="FlexiTV Dev">
+  <requires>
+    <import addon="xbmc.python" version="3.0.0"/>
+    <import addon="inputstream.adaptive" version="19.0.0"/>
+    <import addon="script.module.requests" version="2.27.0"/>
+  </requires>
+  <extension point="xbmc.python.pluginsource" library="main.py">
+    <provides>video</provides>
+  </extension>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="en">Watch Flexi TV channels live</summary>
+    <description lang="en">Watch live TV channels from the Flexi TV streaming service. Browse channels by category and play HLS streams directly in Kodi via InputStream Adaptive. Requires a valid Flexi TV subscription.</description>
+    <summary lang="sk">Sledujte Flexi TV kanály naživo</summary>
+    <description lang="sk">Sledujte živé televízne kanály zo streamovacej služby Flexi TV. Prehľadávajte kanály podľa kategórií a prehrávajte HLS streamy priamo v Kodi cez InputStream Adaptive. Vyžaduje platné predplatné Flexi TV.</description>
+    <disclaimer lang="en">This addon requires valid Flexi TV subscription credentials. You must configure your username and password in the addon settings.</disclaimer>
+    <platform>all</platform>
+    <assets>
+      <icon>resources/icon_flexi.png</icon>
+      <fanart>resources/fanart.jpg</fanart>
+    </assets>
+  </extension>
+</addon>
