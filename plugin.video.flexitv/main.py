@@ -34,6 +34,17 @@ def router(paramstring, handle):
     params = parse_qs(paramstring)
     action = params.get('action', [None])[0]
 
+    if action == 'quick_settings':
+        labels = ['Auto (no cap)', '1080p', '720p', '480p', '360p']
+        values = ['Auto', '1080p', '720p', '480p', '360p']
+        current = ADDON.getSetting('max_resolution').strip() or 'Auto'
+        preselect = values.index(current) if current in values else -1
+        sel = xbmcgui.Dialog().select('Maximum resolution', labels, presel=preselect)
+        if sel >= 0:
+            ADDON.setSetting('max_resolution', values[sel])
+        xbmc.executebuiltin('Container.Refresh')
+        return
+
     username, password, base_url = get_settings()
     if not username or not password:
         username, password = open_settings_and_retry()
@@ -89,6 +100,14 @@ def router(paramstring, handle):
             dialog = xbmcgui.Dialog()
             dialog.ok(ADDON_NAME, 'Could not load categories.', str(e)[:200])
             return
+
+        if ADDON.getSetting('quick_settings_visible').strip() == 'true':
+            qs_url = f'{sys.argv[0]}?action=quick_settings'
+            qs_label = 'Quick settings'
+            qs_li = xbmcgui.ListItem(qs_label)
+            qs_li.setArt({'icon': 'DefaultAddonSettings.png'})
+            xbmcplugin.addDirectoryItem(handle, qs_url, qs_li, isFolder=False)
+
         for cat in categories:
             url = f'{sys.argv[0]}?action=channels&category={quote(cat["id"], safe="")}'
             li = xbmcgui.ListItem(cat['label'])

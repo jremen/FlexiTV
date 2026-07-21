@@ -4,6 +4,10 @@
     <setting id="username" type="text" label="Username / Email" default=""/>
     <setting id="password" type="text" label="Password" default="" option="hidden"/>
   </category>
+  <category label="Playback">
+    <setting id="max_resolution" type="labelenum" label="Maximum resolution" values="Auto|1080p|720p|480p|360p" default="Auto"/>
+    <setting id="quick_settings_visible" type="bool" label="Show Quick settings in root menu" default="true"/>
+  </category>
   <category label="Advanced">
     <setting id="base_url" type="text" label="Base URL" default="https://tv.flexitv.sk"/>
   </category>
