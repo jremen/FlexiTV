@@ -3,6 +3,7 @@
 .graymatter/
 __pycache__/
 *.pyc
+plugin.video.flexitv*.zip
 
 # Bundled Python dependencies (rebuilt by build.sh)
 plugin.video.flexitv/resources/lib/python-deps/
