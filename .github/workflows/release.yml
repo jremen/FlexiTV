@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build addon zip and create release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install python-deps into scratch dir
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --target /tmp/py39-deps playwright requests
+
+      - name: Copy python-deps into addon
+        run: |
+          rm -rf plugin.video.flexitv/resources/lib/python-deps
+          mkdir -p plugin.video.flexitv/resources/lib/python-deps
+          cp -R /tmp/py39-deps/. plugin.video.flexitv/resources/lib/python-deps/
+          rm -rf plugin.video.flexitv/resources/lib/python-deps/bin
+          rm -rf plugin.video.flexitv/resources/lib/python-deps/include
+
+      - name: Make bundled node executable
+        run: chmod +x plugin.video.flexitv/resources/lib/python-deps/playwright/driver/node || true
+
+      - name: Fetch latest channel logos
+        if: "secrets.FLEXI_USER != '' && secrets.FLEXI_PASS != ''"
+        env:
+          FLEXI_USER: ${{ secrets.FLEXI_USER }}
+          FLEXI_PASS: ${{ secrets.FLEXI_PASS }}
+        run: |
+          python3 scripts/fetch_logos.py --user "$FLEXI_USER" --pass "$FLEXI_PASS" || echo "WARNING: logo fetch failed, continuing"
+
+      - name: Build addon zip
+        run: bash build.sh
+
+      - name: Upload zip as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin.video.flexitv-zip
+          path: plugin.video.flexitv-*.zip
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: plugin.video.flexitv-*.zip
+          fail_on_unmatched_files: true
