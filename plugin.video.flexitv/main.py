@@ -102,12 +102,29 @@ def router(paramstring, handle):
         category_id = params.get('category', [''])[0]
         log(f'Loading channels for category: {category_id}')
         channels = tv.get_channels(category_id)
+
+        from resources.lib.telkac import Telkac
+        from resources.lib import epg
+        try:
+            tk = Telkac(log=lambda msg: log(msg))
+            now_map = epg.build_current_program_map(tk)
+        except Exception as e:
+            log(f'Failed to fetch EPG now-playing: {e}', xbmc.LOGWARNING)
+            now_map = {}
+
         for ch in channels:
             data_json = json.dumps({"uri": ch["uri"], "suffix": ch["suffix"], "id": ch["id"], "label": ch["label"]})
             url = f'{sys.argv[0]}?action=play&data={quote(data_json, safe="")}'
-            li = xbmcgui.ListItem(ch['label'])
+            current = now_map.get(ch["suffix"])
+            label2 = current["title"] if current else ""
+            li = xbmcgui.ListItem(ch['label'], label2=label2)
             li.setProperty('IsPlayable', 'true')
-            li.setInfo('video', {'title': ch['label']})
+            info = {'title': ch['label']}
+            if current:
+                info['plot'] = f'Now: {current["title"]} ({current["time"]})'
+                if current.get("desc"):
+                    info['plot'] += f'\n{current["desc"]}'
+            li.setInfo('video', info)
             if ch.get('logo'):
                 li.setArt({'thumb': ch['logo'], 'icon': ch['logo']})
             xbmcplugin.addDirectoryItem(handle, url, li, isFolder=False)
