@@ -102,3 +102,21 @@ def flexi_suffix(chid):
 
 def can_play(chid):
     return flexi_suffix(chid) is not None
+
+
+_SUFFIX_TO_CHID = {v[1]: c for c, v in TELEKAC_TO_FLEXI.items() if v[1]}
+
+def chid_for_suffix(suffix):
+    return _SUFFIX_TO_CHID.get(suffix)
+
+
+def build_current_program_map(tk):
+    chids = default_chids()
+    schedule = tk.schedule("dnes", chids=chids, full_day=False)
+    result = {}
+    for entry in schedule:
+        chid = entry["station"]["chid"]
+        suffix = flexi_suffix(chid)
+        if suffix and entry["programs"]:
+            result[suffix] = entry["programs"][0]
+    return result
