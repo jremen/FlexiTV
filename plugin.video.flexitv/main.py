@@ -36,11 +36,11 @@ def router(paramstring, handle):
     action = params.get('action', [None])[0]
 
     if action == 'quick_settings':
-        labels = ['Auto (no cap)', '1080p', '720p', '480p', '360p']
+        labels = ['Auto (adaptive)', '1080p (fixed)', '720p (fixed)', '480p (fixed)', '360p (fixed)']
         values = ['Auto', '1080p', '720p', '480p', '360p']
         current = ADDON.getSetting('max_resolution').strip() or 'Auto'
         preselect = values.index(current) if current in values else -1
-        sel = xbmcgui.Dialog().select('Maximum resolution', labels, presel=preselect)
+        sel = xbmcgui.Dialog().select('Stream resolution', labels, presel=preselect)
         if sel >= 0:
             ADDON.setSetting('max_resolution', values[sel])
         xbmc.executebuiltin('Container.Refresh')

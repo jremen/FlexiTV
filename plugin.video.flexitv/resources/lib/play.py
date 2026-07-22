@@ -9,8 +9,6 @@ def play_stream(handle, stream_info):
     manifest_type = stream_info.get("manifest_type") or ("hls" if ".m3u8" in url else "mpd")
 
     max_res = xbmcaddon.Addon().getSetting('max_resolution').strip()
-    if max_res and max_res != 'Auto':
-        xbmc.log(f"[play.py] Applying resolution cap: {max_res}", xbmc.LOGINFO)
 
     listitem = xbmcgui.ListItem(path=url)
     listitem.setMimeType("application/x-mpegURL" if manifest_type == "hls" else "application/dash+xml")
@@ -19,7 +17,12 @@ def play_stream(handle, stream_info):
     listitem.setProperty("inputstream.adaptive.manifest_type", manifest_type)
 
     if max_res and max_res != 'Auto':
+        xbmc.log(f"[play.py] Setting fixed resolution: {max_res}", xbmc.LOGINFO)
         listitem.setProperty("inputstream.adaptive.chooser_resolution_max", max_res)
+        listitem.setProperty("inputstream.adaptive.stream_selection_type", 'fixed-res')
+    else:
+        xbmc.log("[play.py] Adaptive resolution (no cap)", xbmc.LOGINFO)
+        listitem.setProperty("inputstream.adaptive.stream_selection_type", 'adaptive')
 
     if headers:
         header_pairs = [f"{k}={v}" for k, v in headers.items()]
