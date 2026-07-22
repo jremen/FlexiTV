@@ -48,6 +48,27 @@ This addon tries multiple patterns to find the stream URL:
 
 If none match, check your `kodi.log` for details on what the channel page contains.
 
+## Stream quality
+
+You can limit the maximum video resolution via **Settings → Playback → Maximum resolution**:
+
+- **Auto (default)**: no cap, stream at whatever quality the connection can handle.
+- **1080p / 720p / 480p / 360p**: cap resolution at the selected level (applied server-side via Kodi's InputStream Adaptive).
+
+To change quality on the fly without digging into settings, use the **Quick settings** entry at the top of the addon's root menu. This opens a dialog that lets you pick a resolution; the change is saved and applied to the next stream you play.
+
+Quick settings can be hidden via **Settings → Playback → Show Quick settings in root menu**.
+
+## TV Schedule (EPG)
+
+The addon can show a 14-day TV program guide sourced from [telkac.zoznam.sk](https://telkac.zoznam.sk). Browse the schedule of your chosen stations and click a program to play that channel through your Flexi TV subscription.
+
+- **TV Schedule** (root menu) — landing page with shortcuts to today's schedule and each selected station.
+- **Choose stations** — multi-select dialog with all available telkac.sk channels. The selection is stored internally and only changed from inside TV Schedule.
+- **Program row** — `[HH:MM] Program Title (Station Name)` with a short description and poster art. Click to play the channel on Flexi TV.
+
+Channels that are not available on Flexi TV are shown in grey and cannot be played directly.
+
 ## Dependencies
 
 All Python dependencies (Playwright, requests, etc.) are bundled inside the

@@ -1,3 +1,4 @@
+import datetime
 import sys
 import json
 import xbmc
@@ -33,6 +34,39 @@ def open_settings_and_retry():
 def router(paramstring, handle):
     params = parse_qs(paramstring)
     action = params.get('action', [None])[0]
+
+    if action == 'quick_settings':
+        labels = ['Auto (no cap)', '1080p', '720p', '480p', '360p']
+        values = ['Auto', '1080p', '720p', '480p', '360p']
+        current = ADDON.getSetting('max_resolution').strip() or 'Auto'
+        preselect = values.index(current) if current in values else -1
+        sel = xbmcgui.Dialog().select('Maximum resolution', labels, presel=preselect)
+        if sel >= 0:
+            ADDON.setSetting('max_resolution', values[sel])
+        xbmc.executebuiltin('Container.Refresh')
+        return
+
+    if action == 'epg':
+        _epg_landing(handle)
+        return
+
+    if action == 'epg_timeline':
+        day = params.get('day', ['dnes'])[0]
+        station_filter = params.get('station', [None])[0]
+        _epg_timeline(handle, day, station_filter)
+        return
+
+    if action == 'epg_stations':
+        _epg_stations_picker(handle)
+        return
+
+    if action == 'epg_notavail':
+        enc = params.get('data', [None])[0]
+        if enc:
+            detail = json.loads(enc)
+            dialog = xbmcgui.Dialog()
+            dialog.ok('TV Schedule', f'"{detail["title"]}" is not available on Flexi TV.')
+        return
 
     username, password, base_url = get_settings()
     if not username or not password:
@@ -89,6 +123,19 @@ def router(paramstring, handle):
             dialog = xbmcgui.Dialog()
             dialog.ok(ADDON_NAME, 'Could not load categories.', str(e)[:200])
             return
+
+        epg_url = f'{sys.argv[0]}?action=epg'
+        epg_li = xbmcgui.ListItem('TV Schedule')
+        epg_li.setArt({'icon': 'DefaultAddonTvInfo.png'})
+        xbmcplugin.addDirectoryItem(handle, epg_url, epg_li, isFolder=True)
+
+        if ADDON.getSetting('quick_settings_visible').strip() == 'true':
+            qs_url = f'{sys.argv[0]}?action=quick_settings'
+            qs_label = 'Quick settings'
+            qs_li = xbmcgui.ListItem(qs_label)
+            qs_li.setArt({'icon': 'DefaultAddonSettings.png'})
+            xbmcplugin.addDirectoryItem(handle, qs_url, qs_li, isFolder=False)
+
         for cat in categories:
             url = f'{sys.argv[0]}?action=channels&category={quote(cat["id"], safe="")}'
             li = xbmcgui.ListItem(cat['label'])
@@ -96,6 +143,114 @@ def router(paramstring, handle):
                 li.setArt({'thumb': cat['logo']})
             xbmcplugin.addDirectoryItem(handle, url, li, isFolder=True)
         xbmcplugin.endOfDirectory(handle)
+
+
+def _epg_landing(handle):
+    from resources.lib.telkac import Telkac
+    from resources.lib import epg
+    tk = Telkac(log=lambda msg: log(msg))
+    all_stations = tk.stations()
+    selected = set(epg.get_selected_chids())
+    arg = sys.argv[0]
+    chids = epg.get_selected_chids()
+    schedule = tk.schedule("dnes", chids)
+    schedule_by_chid = {e["station"]["chid"]: e for e in schedule}
+
+    day_url = f'{arg}?action=epg_timeline&day=dnes'
+    li = xbmcgui.ListItem('Show today\'s schedule')
+    xbmcplugin.addDirectoryItem(handle, day_url, li, isFolder=True)
+
+    stations_url = f'{arg}?action=epg_stations'
+    li = xbmcgui.ListItem('Choose stations')
+    li.setArt({'icon': 'DefaultAddonSettings.png'})
+    xbmcplugin.addDirectoryItem(handle, stations_url, li, isFolder=False)
+
+    for st in all_stations:
+        if st["chid"] not in selected:
+            continue
+        station_url = f'{arg}?action=epg_timeline&day=dnes&station={st["chid"]}'
+        now_playing = ""
+        entry = schedule_by_chid.get(st["chid"])
+        if entry and entry["programs"]:
+            now_playing = f'Now: {entry["programs"][0]["title"]}'
+        st_li = xbmcgui.ListItem(st["name"], label2=now_playing)
+        st_li.setArt({'thumb': st["logo"]})
+        xbmcplugin.addDirectoryItem(handle, station_url, st_li, isFolder=True)
+    xbmcplugin.endOfDirectory(handle)
+
+
+def _epg_timeline(handle, day, station_filter=None):
+    from resources.lib.telkac import Telkac
+    from resources.lib import epg
+    tk = Telkac(log=lambda msg: log(msg))
+    chids = epg.get_selected_chids()
+    full_day = station_filter is not None
+    schedule = tk.schedule(day, chids, full_day=full_day)
+    if station_filter:
+        station_filter = int(station_filter)
+        schedule = [e for e in schedule if e["station"]["chid"] == station_filter]
+    arg = sys.argv[0]
+
+    xbmcplugin.setContent(handle, 'epg')
+
+    for entry in schedule:
+        st = entry["station"]
+        for idx, prog in enumerate(entry["programs"]):
+            if station_filter:
+                base_label = f'[{prog["time"]}] {prog["title"]}'
+            else:
+                base_label = f'[{prog["time"]}] {prog["title"]}  ({st["name"]})'
+            label = f'[COLOR=green]{base_label}[/COLOR]' if idx == 0 else base_label
+            chid = st["chid"]
+            if epg.can_play(chid):
+                data = json.dumps({
+                    "uri": "",
+                    "suffix": epg.flexi_suffix(chid),
+                    "id": "",
+                    "label": st["name"],
+                })
+                url = f'{arg}?action=play&data={quote(data, safe="")}'
+                li = xbmcgui.ListItem(label)
+                li.setProperty('IsPlayable', 'true')
+            else:
+                detail = json.dumps({"chid": chid, "href": prog["href"], "title": prog["title"]})
+                url = f'{arg}?action=epg_notavail&data={quote(detail, safe="")}'
+                li = xbmcgui.ListItem(f'[COLOR=grey]{label}[/COLOR]')
+
+            li.setInfo('video', {
+                'title': prog["title"],
+                'plot': prog.get("desc", ""),
+                'duration': prog.get("duration", 0),
+                'channelname': st["name"],
+                'starttime': prog["start_dt"].strftime('%d.%m.%Y %H:%M:%S'),
+            })
+            art = {}
+            if prog.get("image"):
+                art['thumb'] = prog["image"]
+            elif st.get("logo"):
+                art['thumb'] = st["logo"]
+            if art:
+                li.setArt(art)
+            xbmcplugin.addDirectoryItem(handle, url, li, isFolder=False)
+    xbmcplugin.endOfDirectory(handle)
+
+
+def _epg_stations_picker(handle):
+    from resources.lib.telkac import Telkac
+    from resources.lib import epg
+    tk = Telkac(log=lambda msg: log(msg))
+    all_stations = tk.stations()
+    current = set(epg.get_selected_chids())
+    names = [s["name"] for s in all_stations]
+    preselect = [i for i, s in enumerate(all_stations) if s["chid"] in current]
+    sel = xbmcgui.Dialog().multiselect('Choose TV stations', names, preselect=preselect)
+    if sel is None:
+        xbmcplugin.endOfDirectory(handle)
+        return
+    chosen = [all_stations[i]["chid"] for i in sel]
+    epg.set_selected_chids(chosen)
+    xbmc.executebuiltin('Container.Refresh')
+
 
 if __name__ == '__main__':
     handle = int(sys.argv[1])
