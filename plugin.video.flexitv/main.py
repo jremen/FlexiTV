@@ -1,3 +1,4 @@
+import datetime
 import sys
 import json
 import xbmc
@@ -151,6 +152,9 @@ def _epg_landing(handle):
     all_stations = tk.stations()
     selected = set(epg.get_selected_chids())
     arg = sys.argv[0]
+    chids = epg.get_selected_chids()
+    schedule = tk.schedule("dnes", chids)
+    schedule_by_chid = {e["station"]["chid"]: e for e in schedule}
 
     day_url = f'{arg}?action=epg_timeline&day=dnes'
     li = xbmcgui.ListItem('Show today\'s schedule')
@@ -165,7 +169,11 @@ def _epg_landing(handle):
         if st["chid"] not in selected:
             continue
         station_url = f'{arg}?action=epg_timeline&day=dnes&station={st["chid"]}'
-        st_li = xbmcgui.ListItem(st["name"])
+        now_playing = ""
+        entry = schedule_by_chid.get(st["chid"])
+        if entry and entry["programs"]:
+            now_playing = f'Now: {entry["programs"][0]["title"]}'
+        st_li = xbmcgui.ListItem(st["name"], label2=now_playing)
         st_li.setArt({'thumb': st["logo"]})
         xbmcplugin.addDirectoryItem(handle, station_url, st_li, isFolder=True)
     xbmcplugin.endOfDirectory(handle)
@@ -176,15 +184,23 @@ def _epg_timeline(handle, day, station_filter=None):
     from resources.lib import epg
     tk = Telkac(log=lambda msg: log(msg))
     chids = epg.get_selected_chids()
-    schedule = tk.schedule(day, chids)
+    full_day = station_filter is not None
+    schedule = tk.schedule(day, chids, full_day=full_day)
     if station_filter:
+        station_filter = int(station_filter)
         schedule = [e for e in schedule if e["station"]["chid"] == station_filter]
     arg = sys.argv[0]
 
+    xbmcplugin.setContent(handle, 'epg')
+
     for entry in schedule:
         st = entry["station"]
-        for prog in entry["programs"]:
-            label = f'[{prog["time"]}] {prog["title"]}  ({st["name"]})'
+        for idx, prog in enumerate(entry["programs"]):
+            if station_filter:
+                base_label = f'[{prog["time"]}] {prog["title"]}'
+            else:
+                base_label = f'[{prog["time"]}] {prog["title"]}  ({st["name"]})'
+            label = f'[COLOR=green]{base_label}[/COLOR]' if idx == 0 else base_label
             chid = st["chid"]
             if epg.can_play(chid):
                 data = json.dumps({
@@ -200,10 +216,13 @@ def _epg_timeline(handle, day, station_filter=None):
                 detail = json.dumps({"chid": chid, "href": prog["href"], "title": prog["title"]})
                 url = f'{arg}?action=epg_notavail&data={quote(detail, safe="")}'
                 li = xbmcgui.ListItem(f'[COLOR=grey]{label}[/COLOR]')
+
             li.setInfo('video', {
                 'title': prog["title"],
                 'plot': prog.get("desc", ""),
                 'duration': prog.get("duration", 0),
+                'channelname': st["name"],
+                'starttime': prog["start_dt"].strftime('%d.%m.%Y %H:%M:%S'),
             })
             art = {}
             if prog.get("image"):

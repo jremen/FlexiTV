@@ -1,3 +1,4 @@
+import datetime
 import re
 import requests
 
@@ -55,18 +56,65 @@ class Telkac:
             options.append({"slug": slug, "label": label})
         return options
 
-    def schedule(self, day_slug, chids=None):
+    def schedule(self, day_slug, chids=None, full_day=False):
         path = f"/tv-program/{day_slug}"
         html = self._get(path)
         stations = self._parse_station_list(html)
+        rows = self._parse_timeline_rows(html)
+        chid_to_programs = {}
+        for i, st in enumerate(stations):
+            chid_to_programs[st["chid"]] = rows[i] if i < len(rows) else []
         if chids:
             chid_set = set(chids)
             stations = [s for s in stations if s["chid"] in chid_set]
-        rows = self._parse_timeline_rows(html)
+        now_mins = self._now_minutes()
+        base_date = self._cet_now().date()
         result = []
-        for idx, station in enumerate(stations):
-            programs = rows[idx] if idx < len(rows) else []
-            result.append({"station": station, "programs": programs})
+        for station in stations:
+            all_programs = chid_to_programs.get(station["chid"], [])
+            parsed = []
+            day_offset = 0
+            prev_start = None
+            for prog in all_programs:
+                start = self._to_minutes(prog["time"])
+                if start is None:
+                    continue
+                if prev_start is not None and start < prev_start:
+                    day_offset += 1
+                abs_start = start + day_offset * 1440
+                dur = prog.get("duration", 0)
+                if dur == 0:
+                    dur = 180
+                prog_date = base_date + datetime.timedelta(days=day_offset)
+                prog["start_dt"] = datetime.datetime(
+                    prog_date.year, prog_date.month, prog_date.day,
+                    start // 60, start % 60
+                )
+                parsed.append((abs_start, abs_start + dur, prog))
+                prev_start = start
+            selected = []
+            if full_day:
+                for s, e, prog in parsed:
+                    if s <= now_mins < e or s > now_mins:
+                        selected.append(prog)
+            else:
+                current = None
+                next_prog = None
+                for i, (s, e, prog) in enumerate(parsed):
+                    if s <= now_mins < e:
+                        current = prog
+                        if i + 1 < len(parsed):
+                            next_prog = parsed[i + 1][2]
+                        break
+                    elif s > now_mins:
+                        next_prog = prog
+                        break
+                if current:
+                    selected.append(current)
+                if next_prog:
+                    selected.append(next_prog)
+            if selected:
+                result.append({"station": station, "programs": selected})
         return result
 
     def _parse_station_list(self, html):
@@ -154,18 +202,44 @@ class Telkac:
 
     def _derive_durations(self, programs):
         for i in range(len(programs) - 1):
-            dur = self._time_diff_minutes(programs[i]["time"], programs[i + 1]["time"])
+            dur = self._program_duration(programs[i]["time"], programs[i + 1]["time"])
             programs[i]["duration"] = dur
         if programs:
             programs[-1]["duration"] = 0
         return programs
 
-    def _time_diff_minutes(self, t1, t2):
-        def to_mins(t):
-            parts = t.strip().split(":")
+    def _cet_now(self):
+        now = datetime.datetime.utcnow()
+        offset = datetime.timedelta(hours=2 if self._is_cest(now) else 1)
+        return now + offset
+
+    def _now_minutes(self):
+        cet = self._cet_now()
+        return cet.hour * 60 + cet.minute
+
+    def _is_cest(self, dt):
+        year = dt.year
+        mar = datetime.date(year, 3, 31)
+        while mar.weekday() != 6:
+            mar -= datetime.timedelta(days=1)
+        start = datetime.datetime(year, mar.month, mar.day, 1, 0, 0)
+        oct = datetime.date(year, 10, 31)
+        while oct.weekday() != 6:
+            oct -= datetime.timedelta(days=1)
+        end = datetime.datetime(year, oct.month, oct.day, 1, 0, 0)
+        return start <= dt < end
+
+    def _to_minutes(self, t):
+        parts = t.strip().split(":")
+        if len(parts) == 2:
             return int(parts[0]) * 60 + int(parts[1])
-        m1 = to_mins(t1)
-        m2 = to_mins(t2)
+        return None
+
+    def _program_duration(self, t1, t2):
+        m1 = self._to_minutes(t1)
+        m2 = self._to_minutes(t2)
+        if m1 is None or m2 is None:
+            return 0
         if m2 < m1:
             m2 += 24 * 60
         return m2 - m1
