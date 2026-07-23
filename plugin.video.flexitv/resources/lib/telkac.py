@@ -350,7 +350,8 @@ class Telkac:
 
     @staticmethod
     def _flatten_ws(text):
-        text = re.sub(r'\s+', ' ', text).strip()
+        text = text.replace('&nbsp;', ' ')
+        text = re.sub(r'[\s\xa0]+', ' ', text).strip()
         text = re.sub(r'\s*,\s*', ', ', text)
         text = re.sub(r'(,\s*){2,}', ', ', text)
         text = text.strip(', ').strip()
