@@ -1,5 +1,9 @@
 import datetime
+import hashlib
+import json
+import os
 import re
+import time
 import requests
 
 
@@ -12,16 +16,23 @@ USER_AGENT = (
 
 
 class Telkac:
-    def __init__(self, log=None):
+    def __init__(self, log=None, cache_dir=None):
         self._session = requests.Session()
         self._session.headers.update({"User-Agent": USER_AGENT})
         self.log_fn = log or (lambda msg: None)
+        self.cache_dir = cache_dir
 
     def log(self, msg):
         self.log_fn(f"[Telkac] {msg}")
 
     def _get(self, path):
-        url = f"{BASE}{path}" if path.startswith("/") else f"{BASE}/{path}"
+        if path.startswith("http"):
+            url = path
+        elif path.startswith("/"):
+            url = f"{BASE}{path}"
+        else:
+            url = f"{BASE}/{path}"
+        self.log(f"GET {url}")
         resp = self._session.get(url, timeout=30)
         resp.raise_for_status()
         return resp.text
@@ -272,5 +283,76 @@ class Telkac:
                 metadata[key] = val
         return {"poster": poster, "rating": rating, "plot": plot, "metadata": metadata}
 
+    def program_main_content(self, url):
+        def fetch():
+            html = self._get(url)
+            m = re.search(
+                r'<div\s+class="main-content"[^>]*>(.*?)</div>\s*<aside\s+class="main-right">',
+                html, re.DOTALL,
+            )
+            if not m:
+                return ""
+            block = m.group(1)
+            pairs = {}
+            for dt, dd in re.findall(r'<dt>(.*?)</dt>\s*<dd>(.*?)</dd>', block, re.DOTALL):
+                key = re.sub(r'<[^>]+>', '', dt).strip().rstrip(':')
+                val = self._flatten_ws(re.sub(r'<[^>]+>', '', dd))
+                if key and not pairs.get(key):
+                    pairs[key] = val
+            parts = []
+            for key in ('Rok', 'Hrajú', 'Obsah'):
+                if pairs.get(key):
+                    parts.append(f'{key}: {self._unescape(pairs[key])}')
+            return '\n'.join(parts)
+        return self._get_cached(url, fetch, ttl=86400)
+
+    def _cache_path(self, url):
+        key = hashlib.md5(url.encode('utf-8')).hexdigest()
+        return os.path.join(self.cache_dir, key) if self.cache_dir else None
+
+    def _cache_get(self, url, ttl):
+        path = self._cache_path(url)
+        if not path:
+            return None
+        try:
+            if os.path.exists(path):
+                with open(path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                if time.time() - data.get('ts', 0) < ttl:
+                    return data['value']
+                os.remove(path)
+        except Exception:
+            pass
+        return None
+
+    def _cache_set(self, url, value):
+        path = self._cache_path(url)
+        if not path or not self.cache_dir:
+            return
+        try:
+            os.makedirs(self.cache_dir, exist_ok=True)
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump({'ts': time.time(), 'value': value}, f)
+        except Exception:
+            pass
+
+    def _get_cached(self, url, fetch_fn, ttl=86400):
+        cached = self._cache_get(url, ttl)
+        if cached is not None:
+            return cached
+        value = fetch_fn()
+        if value:
+            self._cache_set(url, value)
+        return value
+
     def _unescape(self, text):
         return text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", '"').replace("&#39;", "'")
+
+    @staticmethod
+    def _flatten_ws(text):
+        text = text.replace('&nbsp;', ' ')
+        text = re.sub(r'[\s\xa0]+', ' ', text).strip()
+        text = re.sub(r'\s*,\s*', ', ', text)
+        text = re.sub(r'(,\s*){2,}', ', ', text)
+        text = text.strip(', ').strip()
+        return text

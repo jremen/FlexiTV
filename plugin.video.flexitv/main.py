@@ -1,10 +1,13 @@
 import datetime
+import os
 import sys
 import json
+from concurrent.futures import ThreadPoolExecutor
 import xbmc
 import xbmcaddon
 import xbmcgui
 import xbmcplugin
+import xbmcvfs
 from urllib.parse import parse_qs, quote
 
 ADDON = xbmcaddon.Addon()
@@ -105,12 +108,25 @@ def router(paramstring, handle):
 
         from resources.lib.telkac import Telkac
         from resources.lib import epg
+        cache_dir = os.path.join(xbmcvfs.translatePath(ADDON.getAddonInfo('profile')), 'cache')
         try:
-            tk = Telkac(log=lambda msg: log(msg))
+            tk = Telkac(log=lambda msg: log(msg), cache_dir=cache_dir)
             now_map = epg.build_current_program_map(tk)
+
+            desc_map = {}
+            with ThreadPoolExecutor(max_workers=5) as pool:
+                def fetch_desc(suffix, prog):
+                    if prog and prog.get("href"):
+                        desc_map[suffix] = tk.program_main_content(prog["href"])
+                futures = []
+                for suffix, prog in now_map.items():
+                    futures.append(pool.submit(fetch_desc, suffix, prog))
+                for f in futures:
+                    f.result()
         except Exception as e:
             log(f'Failed to fetch EPG now-playing: {e}', xbmc.LOGWARNING)
             now_map = {}
+            desc_map = {}
 
         for ch in channels:
             data_json = json.dumps({"uri": ch["uri"], "suffix": ch["suffix"], "id": ch["id"], "label": ch["label"]})
@@ -122,8 +138,9 @@ def router(paramstring, handle):
             info = {'title': ch['label']}
             if current:
                 info['plot'] = f'Now: {current["title"]} ({current["time"]})'
-                if current.get("desc"):
-                    info['plot'] += f'\n{current["desc"]}'
+                desc = desc_map.get(ch["suffix"]) or current.get("desc", "")
+                if desc:
+                    info['plot'] += f'\n{desc}'
             li.setInfo('video', info)
             if ch.get('logo'):
                 li.setArt({'thumb': ch['logo'], 'icon': ch['logo']})
